@@ -1,0 +1,51 @@
+
+@page "/devices/add"
+@inject HttpClient Http
+
+<PageTitle>CastleOps - Add Device</PageTitle>
+<h1>Add Device</h1>
+<p>Here you can add a new device to your account.</p>
+
+@if (isLoading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (!string.IsNullOrEmpty(scriptContent))
+{
+    <MudPaper Class="pa-4 mt-4">
+        @* <MudText Typo="Typo.h6">Installation Script</MudText>
+        <MudTextField T="string" @bind-bind-Value="scriptContent" Label="Copy the script below and run it on the device you want to add." ReadOnly="true" />
+        <MudClipboardIconButton Size="Size.Small" Text="@scriptContent" /> *@
+    </MudPaper>
+}
+else if (hasError)
+{
+    <MudAlert Severity="Severity.Error">Failed to load script content.</MudAlert>
+}
+
+@code {
+    private string scriptContent = string.Empty;
+    private bool isLoading = true;
+    private bool hasError = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            //var client = new HttpClient();
+            //client.DefaultRequestHeaders.Add("User-Agent", "CastleOps-WebApp/1.0");
+            // Replace with your GitHub raw URL
+            //string githubUrl = "https://raw.githubusercontent.com/MorphStack/castle-peon-add-remote-windows-pc/refs/heads/main/src/Add-RemotePC.ps1";
+            //scriptContent = await client.GetStringAsync(githubUrl);
+        }
+        catch (Exception)
+        {
+            hasError = true;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}
+

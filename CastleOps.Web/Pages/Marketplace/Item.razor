@@ -1,0 +1,57 @@
+@page "/marketplace/item/{Slug}"
+@using CastleOps.Core.DTOs
+@using CastleOps.Core.HTTP.Clients
+@inject CastleOpsClient Client
+
+<PageTitle>CastleOps - @_marketplaceItem?.Name</PageTitle>
+
+
+@if (_marketplaceItem != null)
+{
+    <h1>@_marketplaceItem?.Name</h1>
+    <p>@_marketplaceItem?.Description</p>
+    <p>Version: @_marketplaceItem?.Version</p>
+    <p>Author: @_marketplaceItem?.Author</p>
+    <p>Url: <a href="@_marketplaceItem?.Url" target="_blank" rel="noopener noreferrer">@_marketplaceItem?.Url</a></p>
+
+    <MudLink Href="@_marketplaceItem?.Url" Target="_blank" Rel="noopener noreferrer">
+        <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="@(() => InstallItem(_marketplaceItem))">@InstallButtonText</MudButton>
+    </MudLink>
+}
+else
+{
+    <p>Loading item details...</p>
+}
+
+@code {
+    [Parameter]
+    public string? Slug { get; set; }
+
+    private string InstallButtonText = "Install";
+
+    private MarketplaceItemDTO? _marketplaceItem { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(Slug))
+        {
+            var ct = new CancellationToken();
+            var itemDetails = await Client.GetMarketplaceItemAsync(Slug, ct);
+
+            if (itemDetails != null)
+            {
+                _marketplaceItem = itemDetails;
+            }
+        }
+    }
+
+    private async Task InstallItem(MarketplaceItemDTO item)
+    {
+        // Logic to handle the installation of the item
+        InstallButtonText = "Installing...";
+
+        await Client.InstallMarketplaceItemAsync(item, new CancellationToken());
+        InstallButtonText = "Installed";
+        StateHasChanged();
+    }
+}

@@ -1,0 +1,19 @@
+﻿<MudNavMenu>
+    <MudNavLink Href="/" Match="NavLinkMatch.All">Dashboard</MudNavLink>
+    <MudNavGroup Title="Devices" Expanded="true">
+        <MudNavLink Href="/devices" Match="NavLinkMatch.Prefix">Devices</MudNavLink>
+        <MudNavLink Href="/devices/add" Match="NavLinkMatch.Prefix">Add Device</MudNavLink>
+    </MudNavGroup>
+    <MudNavLink Href="/peons" Match="NavLinkMatch.Prefix">Peons</MudNavLink>
+    <MudNavLink Href="/marketplace" Match="NavLinkMatch.Prefix">Marketplace</MudNavLink>
+
+    @* <MudNavGroup Title="Peons" Expanded="false">
+        <MudNavLink Href="/peons" Match="NavLinkMatch.Prefix">Peons</MudNavLink>
+        <MudNavLink Href="/marketplace" Match="NavLinkMatch.Prefix">Marketplace</MudNavLink>
+    </MudNavGroup> *@
+    <MudNavGroup Title="Settings" Expanded="false">
+        <MudNavLink Href="/settings/devices"  Match="NavLinkMatch.Prefix">Devices</MudNavLink>
+        <MudNavLink Href="/settings/logs"  Match="NavLinkMatch.Prefix">Logs</MudNavLink>
+    </MudNavGroup>
+    <MudNavLink Href="/about"  Match="NavLinkMatch.Prefix">About</MudNavLink>
+</MudNavMenu>   

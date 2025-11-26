@@ -1,0 +1,50 @@
+@page "/marketplace"
+@using CastleOps.Core.DTOs
+@using CastleOps.Core.HTTP.Clients
+@using Newtonsoft.Json;
+@using Newtonsoft.Json.Linq
+@inject CastleOpsClient Client
+@inject NavigationManager Navigation
+
+<PageTitle>CastleOps - Marketplace</PageTitle>
+<h1>Peon Marketplace</h1>
+<p>Here you can buy and sell Peons!</p>
+
+@if (_marketplaceItems.Count == 0 || _marketplaceItems == null)
+{
+    <MudAlert Severity="Severity.Info">No marketplace items found.</MudAlert>
+}
+else
+{
+    <MudTable Items="@_marketplaceItems" Striped="true" Hover="true" OnRowClick="@((TableRowClickEventArgs<MarketplaceItemDTO> args) => RowClickEvent(args))" Style="cursor: pointer;">
+        <HeaderContent>
+            <MudTh></MudTh>
+            <MudTh>Item Name</MudTh>
+            <MudTh>Description</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd></MudTd>
+            <MudTd DataLabel="Item Name">@context.Name</MudTd>
+            <MudTd DataLabel="Description">@context.Description</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private List<MarketplaceItemDTO> _marketplaceItems { get; set; } = new List<MarketplaceItemDTO>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var results = await Client.GetMarketplaceItemsAsync(useCache: false);
+        Console.WriteLine(results.ToString());
+        if(results != null)
+        {
+            _marketplaceItems = results;
+        }
+    }
+
+    private void RowClickEvent(TableRowClickEventArgs<MarketplaceItemDTO> tableRowClickEventArgs)
+    {
+        Navigation.NavigateTo($"/marketplace/item/{tableRowClickEventArgs.Item.Slug}");
+    }
+}

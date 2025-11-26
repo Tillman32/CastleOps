@@ -1,0 +1,43 @@
+# .gitignore for CastleOps (.NET, ASP.NET Core, Blazor)
+
+# Build results
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio Code
+.vscode/
+
+# Rider
+.idea/
+*.sln.iml
+
+# ASP.NET Scaffolding
+ScaffoldingReadMe.txt
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Entity Framework Migrations
+CastleOps.Api/Migrations/*Designer.cs
+CastleOps.Api/Migrations/*Snapshot.cs
+
+# Publish output
+publish/
+
+# npm packages
+node_modules/
+
+# Others
+*.swp
+*.bak
+*.tmp

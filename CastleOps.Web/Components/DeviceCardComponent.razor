@@ -1,0 +1,19 @@
+<div class="card" style="width: 18rem;">
+  <img class="card-img-top" src="@ImageUrl" alt="Card image cap">
+  <div class="card-body">
+    <h5 class="card-title">@Title</h5>
+    <p class="card-text">@Text</p>
+    <a href="#" class="btn btn-primary">Go somewhere</a>
+  </div>
+</div>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = "Card title";
+
+    [Parameter]
+    public string Text { get; set; } = "Some quick example text to build on the card title and make up the bulk of the card's content.";
+
+    [Parameter]
+    public string ImageUrl { get; set; } = "...";
+}

@@ -1,0 +1,42 @@
+@using CastleOps.Core.HTTP.Clients;
+@page "/devices/details/{id}"
+@inject CastleOpsClient Client
+
+<PageTitle>CastleOps - Device Details</PageTitle>
+<h3>Device Details</h3>
+
+@if (device != null)
+{
+    @device.Name <br />
+    @device.Status <br />
+    @device.IPAddress <br />
+    @device.LastSeen <br />
+    @device.Id <br />
+    @device.OperatingSystem <br />
+}
+else
+{
+    <p>Loading device details...</p>
+}
+
+
+@code {
+    [Parameter]
+    public string? Id { get; set; }
+
+    private DeviceDTO? device { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(Id))
+        {
+            var ct = new CancellationToken();
+            var deviceDetails = await Client.GetDeviceAsync(Guid.Parse(Id), ct);
+
+            if (deviceDetails != null)
+            {
+                device = deviceDetails;
+            }
+        }
+    }
+}
