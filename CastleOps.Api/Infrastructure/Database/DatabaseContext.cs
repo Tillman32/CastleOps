@@ -12,6 +12,11 @@ public class DatabaseContext : DbContext
     public DbSet<PeonConfig> PeonConfigs { get; set; }
     // public DbSet<MarketplaceItem> MarketplaceItems { get; set; }
 
+    // Client agent entities
+    public DbSet<Client> Clients { get; set; }
+    public DbSet<ClientCommand> ClientCommands { get; set; }
+    public DbSet<ClientMetric> ClientMetrics { get; set; }
+
     public DatabaseContext(DbContextOptions<DatabaseContext> options) : base(options)
     {
 
@@ -60,5 +65,24 @@ public class DatabaseContext : DbContext
                 v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null),
                 v => JsonSerializer.Deserialize<Dictionary<string, string>>(v, (JsonSerializerOptions)null) ?? new Dictionary<string, string>()
             );
+
+        // --- Client Configuration ---
+        // Configure Client entity
+        modelBuilder.Entity<Client>()
+            .HasIndex(c => c.Hostname);
+
+        // Configure ClientCommand entity
+        modelBuilder.Entity<ClientCommand>()
+            .HasIndex(c => c.ClientId);
+        
+        modelBuilder.Entity<ClientCommand>()
+            .HasIndex(c => new { c.ClientId, c.Sent, c.Completed });
+
+        // Configure ClientMetric entity
+        modelBuilder.Entity<ClientMetric>()
+            .HasIndex(c => c.ClientId);
+        
+        modelBuilder.Entity<ClientMetric>()
+            .HasIndex(c => new { c.ClientId, c.Timestamp });
     }
 }
