@@ -21,12 +21,8 @@ RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 # Runtime stage - use ASP.NET Core runtime to serve the Blazor WASM app
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
-EXPOSE 8080
 
 # Copy published app
 COPY --from=build /app/publish .
-
-# Set environment variables
-ENV ASPNETCORE_URLS=http://+:8080
 
 ENTRYPOINT ["dotnet", "CastleOps.Web.dll"]
