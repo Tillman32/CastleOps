@@ -31,7 +31,10 @@ services:
       - apparmor:unconfined
       - seccomp:unconfined
     ports:
-      - "8080:80"
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
     depends_on:
       - castleops-api
     networks:

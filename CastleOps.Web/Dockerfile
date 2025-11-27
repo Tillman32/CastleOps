@@ -18,16 +18,15 @@ COPY CastleOps.Core/ CastleOps.Core/
 WORKDIR /src/CastleOps.Web
 RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 
-# Runtime stage - use nginx to serve the static files
-FROM nginx:alpine AS final
-WORKDIR /usr/share/nginx/html
+# Runtime stage - use ASP.NET Core runtime to serve the Blazor WASM app
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+WORKDIR /app
+EXPOSE 8080
 
-# Copy the published Blazor WASM app
-COPY --from=build /app/publish/wwwroot .
+# Copy published app
+COPY --from=build /app/publish .
 
-# Copy custom nginx config
-COPY CastleOps.Web/nginx.conf /etc/nginx/nginx.conf
+# Set environment variables
+ENV ASPNETCORE_URLS=http://+:8080
 
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["dotnet", "CastleOps.Web.dll"]

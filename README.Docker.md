@@ -40,7 +40,7 @@ docker-compose down
 - **URL**: http://localhost:8080
 - **Container**: castleops-web
 - **Framework**: Blazor WebAssembly
-- **Server**: Nginx
+- **Server**: ASP.NET Core (built-in Kestrel)
 
 ## Individual Service Commands
 
