@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  castleops-api:
+    build:
+      context: .
+      dockerfile: CastleOps.Api/Dockerfile
+    container_name: castleops-api
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - castleops-network
+    restart: unless-stopped
+
+  castleops-web:
+    build:
+      context: .
+      dockerfile: CastleOps.Web/Dockerfile
+    container_name: castleops-web
+    ports:
+      - "8080:80"
+    depends_on:
+      - castleops-api
+    networks:
+      - castleops-network
+    restart: unless-stopped
+
+networks:
+  castleops-network:
+    driver: bridge
+
+volumes:
+  data:
+  logs:
