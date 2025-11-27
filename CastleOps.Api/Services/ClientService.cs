@@ -114,29 +114,8 @@ public class ClientService
 
         await _clientRepo.UpdateAsync(clientId, client);
 
-        // Get pending commands
-        var allCommands = await _commandRepo.GetAllAsync();
-        var pendingCommands = allCommands
-            .Where(c => c.ClientId == clientId && !c.Sent)
-            .OrderByDescending(c => c.Priority)
-            .ThenBy(c => c.DateCreated)
-            .ToList();
-
-        // Mark commands as sent
-        foreach (var cmd in pendingCommands)
-        {
-            cmd.Sent = true;
-            await _commandRepo.UpdateAsync(cmd.Id, cmd);
-        }
-
-        var commandDTOs = pendingCommands.Select(c => new ClientCommandDTO
-        {
-            CommandId = c.Id.ToString(),
-            Type = c.Type,
-            Payload = JsonSerializer.Deserialize<object>(c.PayloadJson),
-            Priority = c.Priority,
-            Timeout = c.Timeout
-        }).ToList();
+        // Get and mark pending commands as sent
+        var commandDTOs = await GetAndMarkPendingCommandsAsync(clientId);
 
         return new ClientHeartbeatResponse
         {
@@ -202,28 +181,7 @@ public class ClientService
             throw new KeyNotFoundException($"Client not found: {clientId}");
         }
 
-        var allCommands = await _commandRepo.GetAllAsync();
-        var pendingCommands = allCommands
-            .Where(c => c.ClientId == clientId && !c.Sent)
-            .OrderByDescending(c => c.Priority)
-            .ThenBy(c => c.DateCreated)
-            .ToList();
-
-        // Mark commands as sent
-        foreach (var cmd in pendingCommands)
-        {
-            cmd.Sent = true;
-            await _commandRepo.UpdateAsync(cmd.Id, cmd);
-        }
-
-        var commandDTOs = pendingCommands.Select(c => new ClientCommandDTO
-        {
-            CommandId = c.Id.ToString(),
-            Type = c.Type,
-            Payload = JsonSerializer.Deserialize<object>(c.PayloadJson),
-            Priority = c.Priority,
-            Timeout = c.Timeout
-        }).ToList();
+        var commandDTOs = await GetAndMarkPendingCommandsAsync(clientId);
 
         return new ClientCommandsResponse
         {
@@ -349,5 +307,35 @@ public class ClientService
         }
 
         return result == 0;
+    }
+
+    /// <summary>
+    /// Gets pending commands for a client, marks them as sent, and returns DTOs.
+    /// Uses database-level filtering for efficiency.
+    /// </summary>
+    private async Task<List<ClientCommandDTO>> GetAndMarkPendingCommandsAsync(Guid clientId)
+    {
+        // Filter at database level for efficiency
+        var pendingCommands = (await _commandRepo.FindAsync(c => c.ClientId == clientId && !c.Sent))
+            .OrderByDescending(c => c.Priority)
+            .ThenBy(c => c.DateCreated)
+            .ToList();
+
+        // Mark commands as sent
+        foreach (var cmd in pendingCommands)
+        {
+            cmd.Sent = true;
+            await _commandRepo.UpdateAsync(cmd.Id, cmd);
+        }
+
+        // Convert to DTOs, using JsonElement for the payload to preserve the JSON structure
+        return pendingCommands.Select(c => new ClientCommandDTO
+        {
+            CommandId = c.Id.ToString(),
+            Type = c.Type,
+            Payload = JsonSerializer.Deserialize<JsonElement>(c.PayloadJson),
+            Priority = c.Priority,
+            Timeout = c.Timeout
+        }).ToList();
     }
 }

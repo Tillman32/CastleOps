@@ -14,6 +14,11 @@ namespace CastleOps.Api.Infrastructure.Database.Repository
 
         Task<TModel> GetByIdAsync(Guid id, params Expression<Func<TModel, object>>[] includeProperties);
 
+        /// <summary>
+        /// Finds entities matching a predicate.
+        /// </summary>
+        Task<IEnumerable<TModel>> FindAsync(Expression<Func<TModel, bool>> predicate);
+
         Task<TModel> CreateAsync(TModel entity);
 
         Task UpdateAsync(Guid id, TModel model);
