@@ -6,35 +6,41 @@ services:
       context: .
       dockerfile: CastleOps.Api/Dockerfile
     container_name: castleops-api
+    restart: unless-stopped
+    security_opt:
+      - apparmor:unconfined
+      - seccomp:unconfined
     ports:
       - "5000:8080"
     environment:
-      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
     networks:
       - castleops-network
-    restart: unless-stopped
 
   castleops-web:
     build:
       context: .
       dockerfile: CastleOps.Web/Dockerfile
     container_name: castleops-web
+    restart: unless-stopped
+    security_opt:
+      - apparmor:unconfined
+      - seccomp:unconfined
     ports:
       - "8080:80"
     depends_on:
       - castleops-api
     networks:
       - castleops-network
-    restart: unless-stopped
 
 networks:
   castleops-network:
     driver: bridge
 
 volumes:
-  data:
-  logs:
+  castleops-data:
+  castleops-logs:
