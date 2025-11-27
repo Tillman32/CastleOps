@@ -55,6 +55,16 @@ namespace CastleOps.Api.Infrastructure.Database.Repository
             return (await query.FirstOrDefaultAsync(e => e.Id == id))!;
         }
 
+        public async Task<IEnumerable<TModel>> FindAsync(Expression<Func<TModel, bool>> predicate)
+        {
+            _logger.LogInformation("Finding entities of type {EntityType} matching predicate", typeof(TModel).Name);
+            
+            return await _dbContext.Set<TModel>()
+                .Where(predicate)
+                .AsNoTracking()
+                .ToListAsync();
+        }
+
         public async Task<TModel> CreateAsync(TModel entity)
         {
             _logger.LogInformation("Creating a new entity of type {EntityType}", typeof(TModel).Name);

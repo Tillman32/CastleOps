@@ -58,6 +58,7 @@ try
     builder.Services.AddScoped<DeviceService>();
     builder.Services.AddScoped<MarketplaceService>();
     builder.Services.AddScoped<PeonService>();
+    builder.Services.AddScoped<ClientService>();
 
     // Clients
     Log.Information("Configuring clients...");
