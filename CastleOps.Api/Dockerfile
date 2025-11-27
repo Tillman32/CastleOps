@@ -25,13 +25,8 @@ RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
-EXPOSE 8080
-EXPOSE 8081
 
 # Copy published app
 COPY --from=publish /app/publish .
-
-# Set environment variables
-ENV ASPNETCORE_URLS=http://+:8080
 
 ENTRYPOINT ["dotnet", "CastleOps.Api.dll"]
