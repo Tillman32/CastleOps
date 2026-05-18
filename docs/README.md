@@ -18,6 +18,6 @@ CastleOps is a self-hosted home device management platform — like a simplified
 This project is a work in progress and has not been publicly released.
 
 - **Backend API**: Core functionality implemented (clients, devices, peons, marketplace)
-- **Web UI**: Blazor Server frontend with Dashboard, Devices, Marketplace, and Peons pages
+- **Web UI**: Blazor WebAssembly frontend with Dashboard, Devices, Marketplace, and Peons pages
 - **Client Agent**: Core phases complete; ~56% production-ready (4 failing API tests remain)
 - **Marketplace**: Validation CI in place; 1 Peon published

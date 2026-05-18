@@ -8,17 +8,26 @@ using CastleOps.Core.HTTP.Clients;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
-var configDir = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ? "/var/log/castleops" : Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CastleOps");
-Directory.CreateDirectory(configDir);
+// On Linux (Docker), use /app/data and /app/logs so docker-compose volume mounts take effect.
+// On Windows/macOS, fall back to the local AppData folder.
+var dataDir = RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+    ? "/app/data"
+    : Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CastleOps");
+var logDir = RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+    ? "/app/logs"
+    : dataDir;
+
+Directory.CreateDirectory(dataDir);
+Directory.CreateDirectory(logDir);
 
 // Configure Serilog before building the host
-var latestLogPath = Path.Join(configDir, "castle-api-log-latest.txt");
+var latestLogPath = Path.Join(logDir, "castle-api-log-latest.txt");
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Debug()
     .WriteTo.Console()
     // Daily rolling log files: castle-api-log-20240915.txt, etc.
-    .WriteTo.File(Path.Join(configDir, "castle-api-log-.txt"),
+    .WriteTo.File(Path.Join(logDir, "castle-api-log-.txt"),
         rollingInterval: RollingInterval.Day,
         retainedFileCountLimit: 14)
     // Always-updated 'latest' log (single file)
@@ -47,7 +56,7 @@ try
 
     // Database
     Log.Information("Configuring database...");
-    var dbPath = Path.Join(configDir, "app.db");
+    var dbPath = Path.Join(dataDir, "app.db");
     builder.Services.AddDbContext<DatabaseContext>(options =>
         options.UseSqlite($"Data Source={dbPath}"));
 
@@ -111,4 +120,3 @@ finally
 {
     Log.CloseAndFlush();
 }
-

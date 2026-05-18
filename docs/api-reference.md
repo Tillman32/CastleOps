@@ -67,13 +67,20 @@ Batch-uploads system metrics collected by the agent.
   "metrics": [
     {
       "timestamp": "2025-01-01T00:00:00Z",
-      "cpuPercent": 12.5,
-      "memoryUsedBytes": 4294967296,
-      "memoryTotalBytes": 17179869184,
+      "cpuUsagePercent": 12.5,
+      "memoryTotal": 17179869184,
+      "memoryUsed": 4294967296,
+      "memoryAvailable": 12884901888,
+      "memoryUsagePercent": 25.0,
+      "diskTotalBytes": 536870912000,
       "diskUsedBytes": 107374182400,
-      "diskTotalBytes": 536870912000
+      "diskFreeBytes": 429496729600,
+      "diskUsagePercent": 20.0,
+      "networkBytesReceived": 1048576,
+      "networkBytesSent": 524288
     }
-  ]
+  ],
+  "count": 1
 }
 ```
 
@@ -90,11 +97,18 @@ Polls for commands queued for this client (e.g., Peon script executions).
 {
   "commands": [
     {
-      "id": "<cmd-uuid>",
+      "commandId": "<cmd-uuid>",
       "type": "run_peon",
-      "payload": {}
+      "payload": {
+        "url": "https://github.com/MorphStack/peon-ping",
+        "entry": "src/ping.ps1",
+        "type": "powershell",
+        "environment": { "PING_DEVICE": "192.168.1.1" }
+      },
+      "timeout": 300
     }
-  ]
+  ],
+  "count": 1
 }
 ```
 
@@ -109,11 +123,16 @@ Reports the outcome of a command execution.
 **Request:**
 ```json
 {
-  "success": true,
-  "output": "Peon executed successfully",
-  "exitCode": 0
+  "commandId": "<cmd-uuid>",
+  "status": "success",
+  "output": "Reply from 192.168.1.1: bytes=32 time<1ms TTL=64",
+  "error": "",
+  "executionTime": 1234,
+  "completedAt": "2025-01-01T00:01:00Z"
 }
 ```
+
+`status` is one of: `success`, `failed`, `timeout`.
 
 ---
 
@@ -159,12 +178,49 @@ Returns all registered client agents.
 
 ### Register Device
 
-`POST /api/v1/devices`
+`POST /api/v1/devices/register`
 
 **Request:**
 ```json
 {
-  "name": "My PC"
+  "name": "My PC",
+  "ipAddress": "192.168.1.10",
+  "operatingSystem": "windows"
+}
+```
+
+### Link Client to Device
+
+`POST /api/v1/devices/{deviceId}/link-client/{clientId}`
+
+Manually links a registered agent to a device. Agents are auto-linked by hostname match on registration; use this endpoint to override.
+
+### Hire Peon on Device
+
+`POST /api/v1/devices/{deviceId}/hire/peon/{peonId}`
+
+Assigns a Peon to a device, creating a `PeonConfig` seeded with the Peon's default environment.
+
+### Run Peon on Device
+
+`POST /api/v1/devices/{deviceId}/peons/{peonId}/run`
+
+Dispatches a `run_peon` command to the agent registered on this device. The agent picks it up on its next poll cycle.
+
+**Request (optional):**
+```json
+{
+  "environmentOverrides": {
+    "PING_DEVICE": "192.168.1.50"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "commandId": "<cmd-uuid>",
+  "message": "Command queued. The agent will execute it on its next poll."
 }
 ```
 
@@ -193,6 +249,20 @@ Fetches the current Peon marketplace listing. Data is sourced from `MorphStack/p
 ]
 ```
 
+### Install Marketplace Item
+
+`POST /api/v1/marketplace/install`
+
+Installs a Peon from the marketplace. The API fetches `peon.yml` from the Peon's GitHub repository and stores the Peon and its default configuration.
+
+**Request:**
+```json
+{
+  "slug": "peon-ping",
+  "url": "https://github.com/MorphStack/Peon-Ping"
+}
+```
+
 ---
 
 ## Peons
@@ -206,12 +276,6 @@ Lists all Peons installed in this CastleOps instance.
 ### Get Peon
 
 `GET /api/v1/peons/{id}`
-
-### Install Peon
-
-`POST /api/v1/peons`
-
-Installs a Peon from a GitHub repository URL. The API fetches `peon.yml` from the repository and stores the Peon and its default configuration.
 
 ### Delete Peon
 

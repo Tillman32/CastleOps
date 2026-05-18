@@ -10,7 +10,7 @@ CastleOps follows a hub-and-spoke model. A central server (the "castle") manages
 │                                                       │
 │  ┌───────────────┐          ┌───────────────────────┐ │
 │  │ CastleOps.Api │◄────────►│   CastleOps.Web       │ │
-│  │ (ASP.NET)     │          │   (Blazor Server)     │ │
+│  │ (ASP.NET)     │          │   (Blazor WebAssembly)│ │
 │  │               │          │                       │ │
 │  │  SQLite DB    │          │   Dashboard           │ │
 │  │  (EF Core)    │          │   Devices             │ │
@@ -62,7 +62,7 @@ Shared class library referenced by both `Api` and `Web`. Contains:
 
 ### CastleOps.Web
 
-Blazor Server frontend. Communicates with `CastleOps.Api` over HTTP. Pages:
+Blazor WebAssembly frontend. Served as static files by nginx; communicates with `CastleOps.Api` over HTTP from the browser. Pages:
 
 - **Dashboard** — Overview of managed devices and system health
 - **Devices** — List and manage registered devices
@@ -113,10 +113,11 @@ A TypeScript/Node.js repository at `MorphStack/peon-marketplace` that serves as 
 2. Web UI calls  GET  /api/v1/marketplace
    → API fetches registry JSON from GitHub (cached in memory)
 3. User selects a Peon and a target device
-4. Web UI calls  POST /api/v1/peons  (install)
+4. Web UI calls  POST /api/v1/marketplace/install
 5. API reads peon.yml from the Peon's GitHub repo
 6. API stores Peon + PeonConfig in the database
-7. API creates a ClientCommand for the target client
+7. Web UI calls  POST /api/v1/devices/{deviceId}/peons/{peonId}/run
+   → API creates a ClientCommand for the target client
 8. Client agent polls commands, downloads and executes the Peon script
 9. Results returned via POST /api/v1/clients/{id}/commands/{cmdId}/result
 ```
@@ -133,7 +134,7 @@ SQLite, single file managed by EF Core.
 | `Devices` | Id, name |
 | `Peons` | Id, Slug, Name, Url, Type, Author, Entry, DefaultVersion, DefaultEnvironment |
 | `PeonConfigs` | Id, PeonId, DeviceId, per-device environment overrides |
-| `MarketplaceItems` | Id, Name, Author, Url, Type, OS |
+| `MarketplaceItems` | Id, Name, Author, Url, Type, OS — **not yet persisted** (DbSet commented out; data is in-memory only) |
 
 ## Authentication
 
@@ -152,4 +153,4 @@ The API and Web are each containerized. `docker-compose.yml` orchestrates both:
 - `castleops-api` — port `5000` (configurable via `API_PORT`)
 - `castleops-web` — port `8080` (configurable via `WEB_PORT`)
 - Shared `castleops-network` bridge network
-- Persistent volumes for `data/` and `logs/`
+- Persistent volumes: `./data/` → `/app/data` (database), `./logs/` → `/app/logs` (log files)

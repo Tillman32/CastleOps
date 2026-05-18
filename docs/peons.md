@@ -80,11 +80,15 @@ Enrolls a remote Windows PC into CastleOps via WinRM. Creates a local admin acco
 
 ## How Peons Are Executed
 
-1. User installs a Peon in CastleOps (API fetches `peon.yml` from GitHub)
-2. Server creates a `ClientCommand` targeting a specific device
-3. Client agent polls for commands, downloads and runs the entrypoint script
-4. Environment variables from `PeonConfig` are injected at runtime
-5. Exit code and output are reported back via the command result endpoint
+This is the current end-to-end implementation:
+
+1. User installs a Peon in CastleOps via `POST /api/v1/marketplace/install` (API fetches `peon.yml` from GitHub)
+2. User triggers execution via `POST /api/v1/devices/{deviceId}/peons/{peonId}/run` — server creates a `ClientCommand` targeting the agent on that device
+3. Client agent polls `GET /api/v1/clients/{id}/commands`, receives the `run_peon` command
+4. Agent downloads the entrypoint script from the Peon's GitHub repository (raw URL)
+5. Environment variables from `PeonConfig` (per-device overrides) are injected at runtime
+6. Script is executed with the correct interpreter (PowerShell, Python, or Bash)
+7. Combined stdout/stderr and exit status are reported back via `POST /api/v1/clients/{id}/commands/{cmdId}/result`
 
 ## Writing Your Own Peon
 
