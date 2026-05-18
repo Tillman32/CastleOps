@@ -28,15 +28,21 @@ Ordered by priority. See [`docs/roadmap.md`](docs/roadmap.md) for full backgroun
 
 - [x] **Device detail: Run Peon flow.** `Devices/Details.razor` shows hired peons with a Run button and available peons with a Hire button. Run dispatches `POST api/v1/devices/{id}/peons/{peonId}/run`.
 
+- [ ] **Build `Devices/Add.razor`.** Page body is entirely commented out. Should display a platform-specific install script (from `MorphStack/castle-peon-add-remote-windows-pc`) that the user copies and runs to register a new device.
+
+- [ ] **Clean up `Marketplace/Index.razor`.** Has unused `@using Newtonsoft.Json` and `@using Newtonsoft.Json.Linq` imports. Also logs raw result to `Console.WriteLine` — remove both.
+
 ---
 
-## API Hygiene
+## API / Data Hygiene
 
 - [x] **Normalize routes to `api/v1/`.** All four controllers now use `api/v1/`.
 
 - [x] **Replace `Console.WriteLine` with `ILogger`.** Fixed in `DeviceService` and `DevicesController`.
 
 - [x] **Pre-check for duplicate Peon install.** `MarketplaceService` now calls `GetPeonBySlugAsync` before insert.
+
+- [ ] **`DeviceDTO.PeonConfigs` leaks the EF model.** `DeviceDTO.PeonConfigs` is typed `List<PeonConfig>` (the entity class). `DeviceService.MapToDTO` assigns it directly. This exposes EF navigation properties and ties the API contract to the ORM layer. Change to `List<PeonConfigDTO>` and map explicitly in `MapToDTO`.
 
 ---
 
@@ -56,6 +62,8 @@ Ordered by priority. See [`docs/roadmap.md`](docs/roadmap.md) for full backgroun
 
 - [ ] **Lock down CORS.** `AllowAnyOrigin` needs a proper origin allowlist before the server is network-exposed.
 
+- [ ] **`wwwroot/appsettings.json` for production.** The new `ApiBaseUrl` setting defaults to `http://localhost:5000/`. Document how to override it (environment-specific `appsettings.Production.json` or build-time substitution in Docker).
+
 ---
 
 ## Medium-term Features
@@ -67,6 +75,7 @@ Ordered by priority. See [`docs/roadmap.md`](docs/roadmap.md) for full backgroun
 - [ ] Linux systemd service integration in the Go agent
 - [ ] Peon execution scheduling (cron-style: run Ping every 5 min)
 - [ ] Offline/error notifications when a device goes offline or a Peon fails
+- [ ] Command result viewer — surface `ClientCommand.ResultJson` in the UI after a Peon runs
 
 ---
 
