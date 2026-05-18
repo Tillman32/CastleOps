@@ -20,13 +20,13 @@ Ordered by priority. See [`docs/roadmap.md`](docs/roadmap.md) for full backgroun
 
 ## UI: Make the Dashboard and Pages Useful
 
-- [ ] **Dashboard — remove hardcoded localhost.** `Dashboard.razor` calls `https://localhost:5001` directly. Replace with the injected `CastleOpsClient`.
+- [x] **Dashboard — remove hardcoded localhost.** `Dashboard.razor` now uses injected `CastleOpsClient`. API base URL is configurable via `wwwroot/appsettings.json`.
 
-- [ ] **Dashboard — show all stats.** `TotalPeons` and `TotalPeonJobs` are computed but never rendered. Add cards alongside the device count.
+- [x] **Dashboard — show all stats.** Dashboard renders Devices, Peons, and Peon Jobs stat cards.
 
-- [ ] **Build out `Peons/Index.razor`.** Currently a placeholder. Should list installed Peons with per-device assignments and a Run button.
+- [x] **Build out `Peons/Index.razor`.** Lists installed Peons in a table (name, type, author, description).
 
-- [ ] **Device detail: Run Peon flow.** `Devices/Details.razor` needs a Peon picker that calls `POST .../run` and shows the command result.
+- [x] **Device detail: Run Peon flow.** `Devices/Details.razor` shows hired peons with a Run button and available peons with a Hire button. Run dispatches `POST api/v1/devices/{id}/peons/{peonId}/run`.
 
 ---
 
