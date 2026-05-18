@@ -1,53 +1,71 @@
-﻿@page "/"
-@using System.Text.Json
+@page "/"
+@inject CastleOpsClient Client
 
 <PageTitle>CastleOps - Dashboard</PageTitle>
 
-<div class="container">
-    <h1>Dashboard</h1>
-</div>
+<MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
 
-<MudCard Width="150px" Class="ma-4">
-    <MudCardContent Class="d-flex flex-column align-items-center">
-        <MudText>Devices</MudText>
-        <MudText Typo="Typo.h3">@TotalDevices</MudText>
-    </MudCardContent>
-</MudCard>
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudGrid>
+        <MudItem xs="12" sm="4">
+            <MudCard Class="ma-2">
+                <MudCardContent Class="d-flex flex-column align-center pa-6">
+                    <MudIcon Icon="@Icons.Material.Filled.Devices" Color="Color.Primary" Size="Size.Large" Class="mb-2" />
+                    <MudText Typo="Typo.h3">@TotalDevices</MudText>
+                    <MudText Typo="Typo.subtitle1">Devices</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudCard Class="ma-2">
+                <MudCardContent Class="d-flex flex-column align-center pa-6">
+                    <MudIcon Icon="@Icons.Material.Filled.Work" Color="Color.Secondary" Size="Size.Large" Class="mb-2" />
+                    <MudText Typo="Typo.h3">@TotalPeons</MudText>
+                    <MudText Typo="Typo.subtitle1">Peons</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudCard Class="ma-2">
+                <MudCardContent Class="d-flex flex-column align-center pa-6">
+                    <MudIcon Icon="@Icons.Material.Filled.Assignment" Color="Color.Tertiary" Size="Size.Large" Class="mb-2" />
+                    <MudText Typo="Typo.h3">@TotalPeonJobs</MudText>
+                    <MudText Typo="Typo.subtitle1">Peon Jobs</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+}
 
 @code {
-        public ICollection<DeviceDTO> Devices { get; set; } = new List<DeviceDTO>();
+    private List<DeviceDTO> _devices = new();
+    private List<PeonDTO> _peons = new();
+    private bool _loading = true;
 
-        // Statistics
-        public int TotalDevices { get; set; }
-        public int TotalPeons { get; set; }
-        public int TotalPeonJobs { get; set; }
+    private int TotalDevices => _devices.Count;
+    private int TotalPeons => _peons.Count;
+    private int TotalPeonJobs => _devices.Sum(d => d.PeonConfigs.Count);
 
-        protected override async Task OnInitializedAsync()
-        {
-            await LoadDevicesAsync();
-            CalculateStatistics();
-        }
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadDevicesAsync(), LoadPeonsAsync());
+        _loading = false;
+    }
 
-        private async Task LoadDevicesAsync()
-        {
-            HttpClient client = new HttpClient();
-            var response = await client.GetAsync("https://localhost:5001/api/devices");
+    private async Task LoadDevicesAsync()
+    {
+        try { _devices = await Client.GetDevicesAsync(); }
+        catch { }
+    }
 
-            if (response.IsSuccessStatusCode)
-            {
-                var json = await response.Content.ReadAsStringAsync();
-                Console.WriteLine(json);
-                Devices = JsonSerializer.Deserialize<List<DeviceDTO>>(json);
-            }
-            else
-            {
-                // Handle error response
-            }
-        }
-
-        private void CalculateStatistics()
-        {
-            TotalDevices = Devices.Count();
-            // TotalPeons and TotalPeonJobs calculation logic here
-        }
+    private async Task LoadPeonsAsync()
+    {
+        try { _peons = await Client.GetPeonsAsync(); }
+        catch { }
+    }
 }

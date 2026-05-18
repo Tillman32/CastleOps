@@ -1,6 +1,63 @@
 @page "/peons"
+@inject CastleOpsClient Client
 
 <PageTitle>CastleOps - Peons</PageTitle>
-<a href="/peons/marketplace">Add more Peons</a>
-<h1>Peons</h1>
-<p>Here you can view and manage the job profile settings for each Peon.</p>
+
+<MudText Typo="Typo.h4" Class="mb-2">Peons</MudText>
+<MudText Class="mb-4">Automation scripts installed and ready to deploy to your devices.</MudText>
+
+<MudButton Href="/marketplace" Variant="Variant.Outlined" Color="Color.Primary" Class="mb-4"
+           StartIcon="@Icons.Material.Filled.Store">
+    Browse Marketplace
+</MudButton>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_peons.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">
+        No peons installed yet. <MudLink Href="/marketplace">Browse the marketplace</MudLink> to add automation scripts.
+    </MudAlert>
+}
+else
+{
+    <MudTable Items="@_peons" Striped="true" Hover="true">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Type</MudTh>
+            <MudTh>Author</MudTh>
+            <MudTh>Description</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>
+                <MudText><b>@context.Name</b></MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Slug</MudText>
+            </MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small">@context.Type</MudChip>
+            </MudTd>
+            <MudTd>@context.Author</MudTd>
+            <MudTd>@context.Description</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private List<PeonDTO> _peons = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _peons = await Client.GetPeonsAsync();
+        }
+        catch { }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

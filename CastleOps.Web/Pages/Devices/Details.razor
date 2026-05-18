@@ -1,42 +1,216 @@
-@using CastleOps.Core.HTTP.Clients;
+@using CastleOps.Core.HTTP.Clients
 @page "/devices/details/{id}"
 @inject CastleOpsClient Client
+@inject ISnackbar Snackbar
 
 <PageTitle>CastleOps - Device Details</PageTitle>
-<h3>Device Details</h3>
 
-@if (device != null)
+@if (device == null)
 {
-    @device.Name <br />
-    @device.Status <br />
-    @device.IPAddress <br />
-    @device.LastSeen <br />
-    @device.Id <br />
-    @device.OperatingSystem <br />
+    <MudProgressCircular Indeterminate="true" />
 }
 else
 {
-    <p>Loading device details...</p>
-}
+    <MudText Typo="Typo.h4" Class="mb-4">@device.Name</MudText>
 
+    <MudGrid Class="mb-6">
+        <MudItem xs="12" md="6">
+            <MudCard>
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Device Info</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText><b>Status:</b> @device.Status</MudText>
+                    <MudText><b>IP Address:</b> @device.IPAddress</MudText>
+                    <MudText><b>OS:</b> @device.OperatingSystem</MudText>
+                    <MudText><b>Last Seen:</b> @device.LastSeen.ToString("g")</MudText>
+                    <MudText>
+                        <b>Agent:</b>
+                        @if (device.ClientId.HasValue)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" Class="ml-1" />
+                            <span>Linked</span>
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small" Class="ml-1" />
+                            <span>Not linked</span>
+                        }
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    @if (!device.ClientId.HasValue)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-4">
+            No agent is registered on this device. Install <strong>castleops-client</strong> to enable remote peon execution.
+        </MudAlert>
+    }
+
+    <MudText Typo="Typo.h5" Class="mb-2">Hired Peons</MudText>
+
+    @if (!device.PeonConfigs.Any())
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-4">No peons hired yet. Hire one from the list below.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="@device.PeonConfigs" Striped="true" Class="mb-6">
+            <HeaderContent>
+                <MudTh>Peon</MudTh>
+                <MudTh>Version</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>
+                    @if (_peonLookup.TryGetValue(context.PeonId, out var p))
+                    {
+                        <MudText><b>@p.Name</b></MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@p.Slug</MudText>
+                    }
+                    else
+                    {
+                        <MudText>@context.PeonId</MudText>
+                    }
+                </MudTd>
+                <MudTd>@context.Version</MudTd>
+                <MudTd>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                               OnClick="@(() => RunPeon(context.PeonId))"
+                               Disabled="@(!device.ClientId.HasValue || _runningPeons.Contains(context.PeonId))"
+                               StartIcon="@Icons.Material.Filled.PlayArrow">
+                        @if (_runningPeons.Contains(context.PeonId))
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                        }
+                        else
+                        {
+                            <span>Run</span>
+                        }
+                    </MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+
+    @{
+        var hiredIds = device.PeonConfigs.Select(pc => pc.PeonId).ToHashSet();
+        var available = _allPeons.Where(p => !hiredIds.Contains(p.Id)).ToList();
+    }
+
+    <MudText Typo="Typo.h5" Class="mb-2 mt-4">Available Peons</MudText>
+
+    @if (!available.Any())
+    {
+        <MudAlert Severity="Severity.Info">
+            All installed peons are hired for this device.
+            <MudLink Href="/marketplace">Browse marketplace</MudLink> to install more.
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="@available" Striped="true" Hover="true">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Type</MudTh>
+                <MudTh>Description</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>
+                    <MudText><b>@context.Name</b></MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Slug</MudText>
+                </MudTd>
+                <MudTd>
+                    <MudChip T="string" Size="Size.Small">@context.Type</MudChip>
+                </MudTd>
+                <MudTd>@context.Description</MudTd>
+                <MudTd>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Small"
+                               OnClick="@(() => HirePeon(context.Id))"
+                               StartIcon="@Icons.Material.Filled.Add">
+                        Hire
+                    </MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+}
 
 @code {
     [Parameter]
     public string? Id { get; set; }
 
-    private DeviceDTO? device { get; set; }
+    private DeviceDTO? device;
+    private List<PeonDTO> _allPeons = new();
+    private Dictionary<Guid, PeonDTO> _peonLookup = new();
+    private HashSet<Guid> _runningPeons = new();
 
     protected override async Task OnInitializedAsync()
     {
         if (!string.IsNullOrEmpty(Id))
         {
-            var ct = new CancellationToken();
-            var deviceDetails = await Client.GetDeviceAsync(Guid.Parse(Id), ct);
+            await LoadPeonsAsync();
+            await LoadDeviceAsync();
+        }
+    }
 
-            if (deviceDetails != null)
-            {
-                device = deviceDetails;
-            }
+    private async Task LoadDeviceAsync()
+    {
+        try
+        {
+            device = await Client.GetDeviceAsync(Guid.Parse(Id!));
+        }
+        catch { }
+    }
+
+    private async Task LoadPeonsAsync()
+    {
+        try
+        {
+            _allPeons = await Client.GetPeonsAsync();
+            _peonLookup = _allPeons.ToDictionary(p => p.Id);
+        }
+        catch { }
+    }
+
+    private async Task RunPeon(Guid peonId)
+    {
+        if (device == null || !device.ClientId.HasValue) return;
+        _runningPeons.Add(peonId);
+        StateHasChanged();
+        try
+        {
+            var commandId = await Client.RunPeonAsync(device.Id, peonId);
+            Snackbar.Add($"Command dispatched — agent will execute on its next poll. Command ID: {commandId}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to dispatch peon: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _runningPeons.Remove(peonId);
+            StateHasChanged();
+        }
+    }
+
+    private async Task HirePeon(Guid peonId)
+    {
+        if (device == null) return;
+        try
+        {
+            await Client.HirePeonAsync(device.Id, peonId);
+            Snackbar.Add("Peon hired successfully.", Severity.Success);
+            await LoadDeviceAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to hire peon: {ex.Message}", Severity.Error);
         }
     }
 }

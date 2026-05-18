@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
-using Microsoft.Extensions.Http;
 using System.Net.Http.Headers;
 using MudBlazor.Services;
 using CastleOps.Web;
@@ -11,9 +10,11 @@ builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 builder.Services.AddMudServices();
 
+var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "http://localhost:5000/";
+
 builder.Services.AddHttpClient<CastleOpsClient>(client =>
 {
-    client.BaseAddress = new Uri("https://localhost:5001/"); // Your API base URL
+    client.BaseAddress = new Uri(apiBaseUrl);
 });
 
 builder.Services.AddHttpClient<GitHubClient>(client =>
