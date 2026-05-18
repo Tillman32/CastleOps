@@ -10,6 +10,9 @@ public class Device : IModel
     public string Status { get; set; }
     public DateTime LastSeen { get; set; }
 
-    // A Device can have many Peon configurations
+    // The registered Go agent on this device. Null until an agent checks in.
+    public Guid? ClientId { get; set; }
+    public Client? Client { get; set; }
+
     public List<PeonConfig> PeonConfigs { get; set; } = new();
 }

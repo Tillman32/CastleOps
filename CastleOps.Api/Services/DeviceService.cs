@@ -1,4 +1,4 @@
-﻿using CastleOps.Api.Infrastructure.Database.Repository;
+using CastleOps.Api.Infrastructure.Database.Repository;
 using CastleOps.Core.Models;
 using CastleOps.Core.DTOs;
 
@@ -8,97 +8,65 @@ public class DeviceService
 {
     private readonly IGenericRepository<Device> _repo;
     private readonly IGenericRepository<Peon> _peonRepo;
+    private readonly IGenericRepository<PeonConfig> _peonConfigRepo;
+    private readonly ILogger<DeviceService> _logger;
 
-    public DeviceService(IGenericRepository<Device> deviceRepository, IGenericRepository<Peon> peonRepository)
+    public DeviceService(
+        IGenericRepository<Device> deviceRepository,
+        IGenericRepository<Peon> peonRepository,
+        IGenericRepository<PeonConfig> peonConfigRepository,
+        ILogger<DeviceService> logger)
     {
         _repo = deviceRepository;
+        _peonRepo = peonRepository;
+        _peonConfigRepo = peonConfigRepository;
+        _logger = logger;
     }
 
     public async Task<DeviceDTO> RegisterDeviceAsync(RegisterDeviceDTO registerDTO)
     {
-        try
+        var device = new Device
         {
-            // Map DTO to Device model
-            var device = new Device
-            {
-                Id = Guid.NewGuid(),
-                Name = registerDTO.Name,
-                IPAddress = registerDTO.IPAddress,
-                OperatingSystem = registerDTO.OperatingSystem,
-                Status = "Active",
-                LastSeen = DateTime.UtcNow
-            };
+            Id = Guid.NewGuid(),
+            DateCreated = DateTime.UtcNow,
+            Name = registerDTO.Name,
+            IPAddress = registerDTO.IPAddress,
+            OperatingSystem = registerDTO.OperatingSystem,
+            Status = "Active",
+            LastSeen = DateTime.UtcNow
+        };
 
-            // Save to the database
-            await _repo.CreateAsync(device);
-
-            // Map back to DTO and return
-            return new DeviceDTO
-            {
-                Id = device.Id,
-                Name = device.Name,
-                IPAddress = device.IPAddress,
-                OperatingSystem = device.OperatingSystem,
-                Status = device.Status,
-                LastSeen = device.LastSeen
-            };
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error registering Device: {ex.Message}");
-            throw new ApplicationException("An error occurred while registering the Device.");
-        }
+        await _repo.CreateAsync(device);
+        _logger.LogInformation("Registered device {DeviceId} ({Name})", device.Id, device.Name);
+        return MapToDTO(device);
     }
 
     public async Task<IEnumerable<DeviceDTO>> GetAllDevicesAsync()
     {
         var devices = await _repo.GetAllAsync();
-        return devices.Select(d => new DeviceDTO
-        {
-            Id = d.Id,
-            Name = d.Name,
-            IPAddress = d.IPAddress,
-            OperatingSystem = d.OperatingSystem,
-            Status = d.Status,
-            LastSeen = d.LastSeen
-        });
+        return devices.Select(MapToDTO);
     }
 
-    public async Task<DeviceDTO> GetDeviceByIdAsync(Guid id)
+    public async Task<DeviceDTO?> GetDeviceByIdAsync(Guid id)
+    {
+        var device = await _repo.GetByIdAsync(id, d => d.PeonConfigs);
+        return device == null ? null : MapToDTO(device);
+    }
+
+    public async Task UpdateDeviceAsync(Guid id, DeviceDTO updatedDevice)
     {
         var device = await _repo.GetByIdAsync(id);
-        return new DeviceDTO
-        {
-            Id = device.Id,
-            Name = device.Name,
-            IPAddress = device.IPAddress,
-            OperatingSystem = device.OperatingSystem,
-            Status = device.Status,
-            LastSeen = device.LastSeen
-        };
-    }
+        if (device == null) return;
 
-    public async Task<DeviceDTO> UpdateDeviceAsync(Guid id, DeviceDTO updatedDevice)
-    {
-        var device = new Device
-        {
-            Id = updatedDevice.Id,
-            Name = updatedDevice.Name,
-            IPAddress = updatedDevice.IPAddress,
-            OperatingSystem = updatedDevice.OperatingSystem,
-            Status = updatedDevice.Status,
-            LastSeen = updatedDevice.LastSeen
-        };
+        device.Name = updatedDevice.Name;
+        device.IPAddress = updatedDevice.IPAddress;
+        device.OperatingSystem = updatedDevice.OperatingSystem;
+        device.Status = updatedDevice.Status;
+        device.LastSeen = updatedDevice.LastSeen;
+        if (updatedDevice.ClientId.HasValue)
+            device.ClientId = updatedDevice.ClientId;
+
         await _repo.UpdateAsync(id, device);
-        return new DeviceDTO
-        {
-            Id = device.Id,
-            Name = device.Name,
-            IPAddress = device.IPAddress,
-            OperatingSystem = device.OperatingSystem,
-            Status = device.Status,
-            LastSeen = device.LastSeen
-        };
     }
 
     public async Task DeleteDeviceAsync(Guid id)
@@ -106,49 +74,87 @@ public class DeviceService
         await _repo.DeleteAsync(id);
     }
 
+    /// <summary>
+    /// Links a registered client agent to a device. Called automatically on agent
+    /// registration (hostname match) or manually via the link endpoint.
+    /// </summary>
+    public async Task LinkClientAsync(Guid deviceId, Guid clientId)
+    {
+        var device = await _repo.GetByIdAsync(deviceId);
+        if (device == null)
+            throw new KeyNotFoundException($"Device {deviceId} not found");
+
+        device.ClientId = clientId;
+        await _repo.UpdateAsync(deviceId, device);
+        _logger.LogInformation("Linked client {ClientId} to device {DeviceId}", clientId, deviceId);
+    }
+
+    /// <summary>
+    /// Assigns a Peon to a device, creating a PeonConfig seeded with the Peon's
+    /// default environment. Safe to call multiple times — updates if already assigned.
+    /// </summary>
     public async Task HirePeonAsync(Guid deviceId, Guid peonId)
     {
-        var device = await GetDeviceByIdAsync(deviceId);
+        var device = await _repo.GetByIdAsync(deviceId);
         if (device == null)
-        {
-            throw new ArgumentException("Device not found");
-        }
+            throw new KeyNotFoundException($"Device {deviceId} not found");
 
         var peon = await _peonRepo.GetByIdAsync(peonId);
+        if (peon == null)
+            throw new KeyNotFoundException($"Peon {peonId} not found");
 
-        var peonConfig = new PeonConfig
+        // Check if already assigned — update instead of creating a duplicate
+        var existing = (await _peonConfigRepo.FindAsync(
+            pc => pc.DeviceId == deviceId && pc.PeonId == peonId)).FirstOrDefault();
+
+        if (existing != null)
         {
-            PeonId = peonId,
-            DeviceId = device.Id,
-            Version = peon.DefaultVersion,
-            Environment = peon.DefaultEnvironment
-        };
-
-        device.PeonConfigs.Add(peonConfig);
-
-        await UpdateDeviceAsync(deviceId, device);
-    }
-
-    public async Task ConfigurePeonAsync(Guid deviceId, PeonConfigDTO peonConfigDTO)
-    {
-
-        var device = await GetDeviceByIdAsync(deviceId);
-        if (device == null)
-        {
-            throw new ArgumentException("Device not found");
+            _logger.LogInformation("Peon {PeonId} already hired on device {DeviceId}; skipping", peonId, deviceId);
+            return;
         }
 
-        // Validate and map the DTO to the model
-        var peonConfig = new PeonConfig
+        var config = new PeonConfig
         {
-            PeonId = peonConfigDTO.PeonId,
-            DeviceId = device.Id,
-            Version = peonConfigDTO.Version,
-            Environment = peonConfigDTO.Environment
+            Id = Guid.NewGuid(),
+            DateCreated = DateTime.UtcNow,
+            PeonId = peonId,
+            DeviceId = deviceId,
+            Version = peon.DefaultVersion,
+            Environment = new Dictionary<string, string>(peon.DefaultEnvironment)
         };
 
-        device.PeonConfigs.Add(peonConfig);
-
-        await UpdateDeviceAsync(deviceId, device);
+        await _peonConfigRepo.CreateAsync(config);
+        _logger.LogInformation("Hired peon {PeonId} on device {DeviceId}", peonId, deviceId);
     }
+
+    /// <summary>
+    /// Updates the per-device environment variables for an already-assigned Peon.
+    /// Throws if the Peon has not been hired on this device yet.
+    /// </summary>
+    public async Task ConfigurePeonAsync(Guid deviceId, PeonConfigDTO peonConfigDTO)
+    {
+        var existing = (await _peonConfigRepo.FindAsync(
+            pc => pc.DeviceId == deviceId && pc.PeonId == peonConfigDTO.PeonId)).FirstOrDefault();
+
+        if (existing == null)
+            throw new InvalidOperationException(
+                $"Peon {peonConfigDTO.PeonId} is not hired on device {deviceId}. Call /hire first.");
+
+        existing.Version = peonConfigDTO.Version;
+        existing.Environment = peonConfigDTO.Environment;
+        await _peonConfigRepo.UpdateAsync(existing.Id, existing);
+        _logger.LogInformation("Configured peon {PeonId} on device {DeviceId}", peonConfigDTO.PeonId, deviceId);
+    }
+
+    private static DeviceDTO MapToDTO(Device d) => new()
+    {
+        Id = d.Id,
+        Name = d.Name,
+        IPAddress = d.IPAddress,
+        OperatingSystem = d.OperatingSystem,
+        Status = d.Status,
+        LastSeen = d.LastSeen,
+        ClientId = d.ClientId,
+        PeonConfigs = d.PeonConfigs
+    };
 }

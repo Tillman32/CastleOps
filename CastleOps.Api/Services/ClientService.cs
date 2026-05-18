@@ -7,16 +7,16 @@ using CastleOps.Core.Models;
 namespace CastleOps.Api.Services;
 
 /// <summary>
-/// Service for managing client agent registration, authentication, and communication.
+/// Manages client agent registration, authentication, metrics, and command dispatch.
 /// </summary>
 public class ClientService
 {
     private readonly IGenericRepository<Client> _clientRepo;
     private readonly IGenericRepository<ClientCommand> _commandRepo;
     private readonly IGenericRepository<ClientMetric> _metricRepo;
+    private readonly IGenericRepository<Device> _deviceRepo;
     private readonly ILogger<ClientService> _logger;
 
-    // Default intervals in seconds
     private const int DefaultHeartbeatInterval = 30;
     private const int DefaultMetricsInterval = 60;
 
@@ -24,26 +24,26 @@ public class ClientService
         IGenericRepository<Client> clientRepo,
         IGenericRepository<ClientCommand> commandRepo,
         IGenericRepository<ClientMetric> metricRepo,
+        IGenericRepository<Device> deviceRepo,
         ILogger<ClientService> logger)
     {
         _clientRepo = clientRepo;
         _commandRepo = commandRepo;
         _metricRepo = metricRepo;
+        _deviceRepo = deviceRepo;
         _logger = logger;
     }
 
     /// <summary>
-    /// Registers a new client and returns credentials.
+    /// Registers a new client agent. If a Device with the same hostname exists and
+    /// has no agent yet, the two are linked automatically.
     /// </summary>
     public async Task<ClientRegisterResponse> RegisterClientAsync(ClientRegisterRequest request)
     {
-        _logger.LogInformation("Registering new client: {Hostname} ({OS} {Architecture})",
+        _logger.LogInformation("Registering client: {Hostname} ({OS} {Architecture})",
             request.Hostname, request.OS, request.Architecture);
 
-        // Generate a secure random token
         var token = GenerateSecureToken();
-        var tokenHash = HashToken(token);
-
         var client = new Client
         {
             Id = Guid.NewGuid(),
@@ -53,7 +53,7 @@ public class ClientService
             OSVersion = request.OSVersion,
             Architecture = request.Architecture,
             AgentVersion = request.AgentVersion,
-            TokenHash = tokenHash,
+            TokenHash = HashToken(token),
             Status = "online",
             LastSeen = DateTime.UtcNow,
             HeartbeatInterval = DefaultHeartbeatInterval,
@@ -62,7 +62,19 @@ public class ClientService
 
         await _clientRepo.CreateAsync(client);
 
-        _logger.LogInformation("Client registered successfully: {ClientId}", client.Id);
+        // Auto-link: if a Device with this hostname has no agent yet, wire them up
+        var matchingDevices = await _deviceRepo.FindAsync(
+            d => d.Name == request.Hostname && d.ClientId == null);
+        var deviceToLink = matchingDevices.FirstOrDefault();
+        if (deviceToLink != null)
+        {
+            deviceToLink.ClientId = client.Id;
+            await _deviceRepo.UpdateAsync(deviceToLink.Id, deviceToLink);
+            _logger.LogInformation("Auto-linked new client {ClientId} to device {DeviceId} ({Hostname})",
+                client.Id, deviceToLink.Id, request.Hostname);
+        }
+
+        _logger.LogInformation("Client registered: {ClientId}", client.Id);
 
         return new ClientRegisterResponse
         {
@@ -74,71 +86,43 @@ public class ClientService
     }
 
     /// <summary>
-    /// Validates a client token and returns the client if valid.
+    /// Validates a Bearer token for a given client.
     /// </summary>
     public async Task<Client?> ValidateTokenAsync(Guid clientId, string token)
     {
         var client = await _clientRepo.GetByIdAsync(clientId);
-        if (client == null)
-        {
-            _logger.LogWarning("Client not found: {ClientId}", clientId);
-            return null;
-        }
-
-        var tokenHash = HashToken(token);
-        if (!SecureCompare(client.TokenHash, tokenHash))
-        {
-            _logger.LogWarning("Invalid token for client: {ClientId}", clientId);
-            return null;
-        }
-
-        return client;
+        if (client == null) return null;
+        return SecureCompare(client.TokenHash, HashToken(token)) ? client : null;
     }
 
-    /// <summary>
-    /// Processes a heartbeat from a client.
-    /// </summary>
     public async Task<ClientHeartbeatResponse> ProcessHeartbeatAsync(Guid clientId, ClientHeartbeatRequest request)
     {
-        var client = await _clientRepo.GetByIdAsync(clientId);
-        if (client == null)
-        {
-            throw new KeyNotFoundException($"Client not found: {clientId}");
-        }
+        var client = await _clientRepo.GetByIdAsync(clientId)
+            ?? throw new KeyNotFoundException($"Client not found: {clientId}");
 
-        // Update client status
         client.Status = request.Status;
         client.Uptime = request.Uptime;
         client.LastSeen = DateTime.UtcNow;
         client.AgentVersion = request.Version;
-
         await _clientRepo.UpdateAsync(clientId, client);
 
-        // Get and mark pending commands as sent
-        var commandDTOs = await GetAndMarkPendingCommandsAsync(clientId);
-
+        var commands = await GetAndMarkPendingCommandsAsync(clientId);
         return new ClientHeartbeatResponse
         {
             Acknowledged = true,
-            Commands = commandDTOs.Count > 0 ? commandDTOs : null
+            Commands = commands.Count > 0 ? commands : null
         };
     }
 
-    /// <summary>
-    /// Stores metrics from a client.
-    /// </summary>
     public async Task<ClientMetricsUploadResponse> StoreMetricsAsync(Guid clientId, ClientMetricsUploadRequest request)
     {
-        var client = await _clientRepo.GetByIdAsync(clientId);
-        if (client == null)
-        {
-            throw new KeyNotFoundException($"Client not found: {clientId}");
-        }
+        _ = await _clientRepo.GetByIdAsync(clientId)
+            ?? throw new KeyNotFoundException($"Client not found: {clientId}");
 
         var storedCount = 0;
         foreach (var snapshot in request.Metrics)
         {
-            var metric = new ClientMetric
+            await _metricRepo.CreateAsync(new ClientMetric
             {
                 Id = Guid.NewGuid(),
                 DateCreated = DateTime.UtcNow,
@@ -155,56 +139,31 @@ public class ClientService
                 DiskUsagePercent = snapshot.DiskUsagePercent,
                 NetworkBytesReceived = snapshot.NetworkBytesReceived,
                 NetworkBytesSent = snapshot.NetworkBytesSent
-            };
-
-            await _metricRepo.CreateAsync(metric);
+            });
             storedCount++;
         }
 
-        _logger.LogDebug("Stored {Count} metrics for client {ClientId}", storedCount, clientId);
-
-        return new ClientMetricsUploadResponse
-        {
-            Received = storedCount,
-            Acknowledged = true
-        };
+        return new ClientMetricsUploadResponse { Received = storedCount, Acknowledged = true };
     }
 
-    /// <summary>
-    /// Gets pending commands for a client.
-    /// </summary>
     public async Task<ClientCommandsResponse> GetPendingCommandsAsync(Guid clientId)
     {
-        var client = await _clientRepo.GetByIdAsync(clientId);
-        if (client == null)
-        {
-            throw new KeyNotFoundException($"Client not found: {clientId}");
-        }
+        _ = await _clientRepo.GetByIdAsync(clientId)
+            ?? throw new KeyNotFoundException($"Client not found: {clientId}");
 
-        var commandDTOs = await GetAndMarkPendingCommandsAsync(clientId);
-
-        return new ClientCommandsResponse
-        {
-            Commands = commandDTOs,
-            Count = commandDTOs.Count
-        };
+        var commands = await GetAndMarkPendingCommandsAsync(clientId);
+        return new ClientCommandsResponse { Commands = commands, Count = commands.Count };
     }
 
-    /// <summary>
-    /// Stores a command execution result.
-    /// </summary>
-    public async Task<ClientCommandResultResponse> StoreCommandResultAsync(Guid clientId, string commandIdStr, ClientCommandResultRequest request)
+    public async Task<ClientCommandResultResponse> StoreCommandResultAsync(
+        Guid clientId, string commandIdStr, ClientCommandResultRequest request)
     {
         if (!Guid.TryParse(commandIdStr, out var commandId))
-        {
             throw new ArgumentException("Invalid command ID format");
-        }
 
         var command = await _commandRepo.GetByIdAsync(commandId);
         if (command == null || command.ClientId != clientId)
-        {
             throw new KeyNotFoundException($"Command not found: {commandId}");
-        }
 
         command.Completed = true;
         command.ResultStatus = request.Status;
@@ -212,124 +171,112 @@ public class ClientService
         command.ResultError = request.Error;
         command.ExecutionTimeMs = request.ExecutionTime;
         command.CompletedAt = request.CompletedAt;
-
         await _commandRepo.UpdateAsync(commandId, command);
 
-        _logger.LogInformation("Command {CommandId} completed with status {Status}",
-            commandId, request.Status);
-
-        return new ClientCommandResultResponse
-        {
-            Acknowledged = true
-        };
+        _logger.LogInformation("Command {CommandId} completed: {Status}", commandId, request.Status);
+        return new ClientCommandResultResponse { Acknowledged = true };
     }
 
     /// <summary>
-    /// Gets all registered clients.
+    /// Queues a run_peon command for delivery to a specific client agent.
+    /// Returns the new command's ID.
     /// </summary>
+    public async Task<Guid> DispatchPeonCommandAsync(
+        Guid clientId,
+        string peonUrl,
+        string entry,
+        string type,
+        Dictionary<string, string> environment)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            url = peonUrl,
+            entry,
+            type,
+            environment
+        });
+
+        var command = new ClientCommand
+        {
+            Id = Guid.NewGuid(),
+            DateCreated = DateTime.UtcNow,
+            ClientId = clientId,
+            Type = "run_peon",
+            PayloadJson = payload,
+            Priority = 0,
+            Timeout = 300,
+            Sent = false,
+            Completed = false
+        };
+
+        await _commandRepo.CreateAsync(command);
+        _logger.LogInformation("Dispatched run_peon command {CommandId} to client {ClientId}",
+            command.Id, clientId);
+        return command.Id;
+    }
+
     public async Task<IEnumerable<ClientDTO>> GetAllClientsAsync()
     {
         var clients = await _clientRepo.GetAllAsync();
-        return clients.Select(c => new ClientDTO
-        {
-            Id = c.Id,
-            Hostname = c.Hostname,
-            OS = c.OS,
-            OSVersion = c.OSVersion,
-            Architecture = c.Architecture,
-            AgentVersion = c.AgentVersion,
-            Status = c.Status,
-            LastSeen = c.LastSeen,
-            DateCreated = c.DateCreated
-        });
+        return clients.Select(MapToDTO);
     }
 
-    /// <summary>
-    /// Gets a client by ID.
-    /// </summary>
     public async Task<ClientDTO?> GetClientByIdAsync(Guid id)
     {
         var client = await _clientRepo.GetByIdAsync(id);
-        if (client == null)
-        {
-            return null;
-        }
-
-        return new ClientDTO
-        {
-            Id = client.Id,
-            Hostname = client.Hostname,
-            OS = client.OS,
-            OSVersion = client.OSVersion,
-            Architecture = client.Architecture,
-            AgentVersion = client.AgentVersion,
-            Status = client.Status,
-            LastSeen = client.LastSeen,
-            DateCreated = client.DateCreated
-        };
+        return client == null ? null : MapToDTO(client);
     }
 
-    /// <summary>
-    /// Generates a cryptographically secure random token.
-    /// </summary>
+    private static ClientDTO MapToDTO(Client c) => new()
+    {
+        Id = c.Id,
+        Hostname = c.Hostname,
+        OS = c.OS,
+        OSVersion = c.OSVersion,
+        Architecture = c.Architecture,
+        AgentVersion = c.AgentVersion,
+        Status = c.Status,
+        LastSeen = c.LastSeen,
+        DateCreated = c.DateCreated
+    };
+
     private static string GenerateSecureToken()
     {
-        var tokenBytes = new byte[32]; // 256 bits
+        var bytes = new byte[32];
         using var rng = RandomNumberGenerator.Create();
-        rng.GetBytes(tokenBytes);
-        return Convert.ToBase64String(tokenBytes);
+        rng.GetBytes(bytes);
+        return Convert.ToBase64String(bytes);
     }
 
-    /// <summary>
-    /// Hashes a token using SHA256.
-    /// </summary>
     private static string HashToken(string token)
     {
-        var tokenBytes = System.Text.Encoding.UTF8.GetBytes(token);
-        var hashBytes = SHA256.HashData(tokenBytes);
-        return Convert.ToBase64String(hashBytes);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(token);
+        return Convert.ToBase64String(SHA256.HashData(bytes));
     }
 
-    /// <summary>
-    /// Performs a constant-time comparison to prevent timing attacks.
-    /// </summary>
     private static bool SecureCompare(string a, string b)
     {
-        if (a.Length != b.Length)
-        {
-            return false;
-        }
-
+        if (a.Length != b.Length) return false;
         var result = 0;
         for (var i = 0; i < a.Length; i++)
-        {
             result |= a[i] ^ b[i];
-        }
-
         return result == 0;
     }
 
-    /// <summary>
-    /// Gets pending commands for a client, marks them as sent, and returns DTOs.
-    /// Uses database-level filtering for efficiency.
-    /// </summary>
     private async Task<List<ClientCommandDTO>> GetAndMarkPendingCommandsAsync(Guid clientId)
     {
-        // Filter at database level for efficiency
-        var pendingCommands = (await _commandRepo.FindAsync(c => c.ClientId == clientId && !c.Sent))
+        var pending = (await _commandRepo.FindAsync(c => c.ClientId == clientId && !c.Sent))
             .OrderByDescending(c => c.Priority)
             .ThenBy(c => c.DateCreated)
             .ToList();
 
-        // Mark commands as sent
-        foreach (var cmd in pendingCommands)
+        foreach (var cmd in pending)
         {
             cmd.Sent = true;
             await _commandRepo.UpdateAsync(cmd.Id, cmd);
         }
 
-        // Convert to DTOs, using JsonElement for the payload to preserve the JSON structure
-        return pendingCommands.Select(c => new ClientCommandDTO
+        return pending.Select(c => new ClientCommandDTO
         {
             CommandId = c.Id.ToString(),
             Type = c.Type,

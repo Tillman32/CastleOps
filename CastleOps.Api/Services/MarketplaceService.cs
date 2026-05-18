@@ -15,7 +15,8 @@ public class MarketplaceService
     private readonly PeonService _peonService;
     private readonly ILogger<MarketplaceService> _logger;
 
-    public MarketplaceService(MemCache<IEnumerable<MarketplaceItemDTO>> cache,
+    public MarketplaceService(
+        MemCache<IEnumerable<MarketplaceItemDTO>> cache,
         GitHubClient gitHubClient,
         PeonService peonService,
         ILogger<MarketplaceService> logger)
@@ -28,70 +29,44 @@ public class MarketplaceService
 
     public async Task<IEnumerable<MarketplaceItemDTO>> GetMarketplaceItemsAsync(bool useCache = true)
     {
-        // Check cache first
         if (useCache)
         {
-            var cachedItems = _cache.GetCachedObject("marketplace_items");
-            if (cachedItems != null)
-            {
-                return cachedItems;
-            }
+            var cached = _cache.GetCachedObject("marketplace_items");
+            if (cached != null) return cached;
         }
 
-        // Fetch from source
-        var marketplaceItems = await QueryAllMarketplaceItemsAsync();
-        if (marketplaceItems == null || !marketplaceItems.Any())
+        var items = await QueryAllMarketplaceItemsAsync();
+        if (items == null || !items.Any())
         {
-            _logger.LogError("No marketplace items found from source.");
+            _logger.LogError("No marketplace items returned from source");
             return Enumerable.Empty<MarketplaceItemDTO>();
         }
 
-        // Update cache
-        _cache.SetCachedObject("marketplace_items", marketplaceItems);
-
-        return marketplaceItems;
+        _cache.SetCachedObject("marketplace_items", items);
+        return items;
     }
 
     public async Task<MarketplaceItemDTO?> GetMarketplaceItemBySlugAsync(string slug)
     {
-        var items = await this.GetMarketplaceItemsAsync();
+        var items = await GetMarketplaceItemsAsync();
         return items.FirstOrDefault(i => i.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private async Task<IEnumerable<MarketplaceItemDTO>> QueryAllMarketplaceItemsAsync()
-    {
-        var response = await _gitHubClient.GetMarketplaceItemsAsync();
-        var document = JsonConvert.DeserializeObject<JObject>(response);
-        var dataElement = document?.GetValue("peons");
-
-        foreach (var item in dataElement?.Children<JObject>() ?? Enumerable.Empty<JObject>())
-        {
-            item["DateCreated"] = DateTime.UtcNow;
-            item["Slug"] = item["url"]?.ToString()?.Split('/').LastOrDefault()?.Replace(".git", "")?.ToLower();
-        }
-
-        var marketplaceItems = JsonConvert.DeserializeObject<List<MarketplaceItemDTO>>(dataElement.ToString());
-
-        if (marketplaceItems == null || !marketplaceItems.Any())
-        {
-            _logger.LogError("Failed to parse marketplace items from GitHub response.");
-            return new List<MarketplaceItemDTO>();
-        }
-
-        return marketplaceItems;
     }
 
     public async Task<bool> InstallMarketplaceItemAsync(MarketplaceItemDTO item)
     {
-        // 1. Get the default config schema from the repo (peon.yml)
-        var defaultConfig = await _gitHubClient.GetPeonConfigAsync(item.Url);
-        if (defaultConfig == null)
+        // Check if already installed
+        var existing = await _peonService.GetPeonBySlugAsync(item.Slug);
+        if (existing != null)
+            throw new InvalidOperationException($"Peon '{item.Slug}' is already installed.");
+
+        // Fetch default config from peon.yml in the Peon's repo
+        var yaml = await _gitHubClient.GetPeonConfigAsync(item.Url);
+        if (yaml == null)
         {
-            _logger.LogError("Failed to parse peon.yml config from {Url}", item.Url);
+            _logger.LogError("Failed to parse peon.yml from {Url}", item.Url);
             return false;
         }
 
-        // 2. Create the Peon DTO, now including the default config values
         var peonDto = new PeonDTO
         {
             Slug = item.Slug,
@@ -101,21 +76,40 @@ public class MarketplaceService
             Description = item.Description,
             Author = item.Author,
             Tags = item.Tags,
-            //Entry = item.Entry,
-            // Populate the default values from the parsed peon.yml
-            DefaultVersion = defaultConfig.Version,
-            DefaultEnvironment = defaultConfig.Environment
+            Entry = yaml.ResolvedEntry,
+            DefaultVersion = yaml.Version,
+            DefaultEnvironment = yaml.Environment
         };
 
-        // 3. Create the Peon entity in the database
-        var peon = await _peonService.CreatePeonAsync(peonDto);
-        if (peon == null)
+        var created = await _peonService.CreatePeonAsync(peonDto);
+        if (created == null)
         {
-            _logger.LogError("Failed to create peon '{PeonName}' in the database.", item.Name);
+            _logger.LogError("Failed to create peon '{Name}' in the database", item.Name);
             return false;
         }
 
-        _logger.LogInformation("Successfully installed marketplace item '{ItemName}' with its default configuration.", item.Name);
+        _logger.LogInformation("Installed marketplace item '{Name}' (entry: {Entry})",
+            item.Name, yaml.ResolvedEntry);
         return true;
+    }
+
+    private async Task<IEnumerable<MarketplaceItemDTO>> QueryAllMarketplaceItemsAsync()
+    {
+        var response = await _gitHubClient.GetMarketplaceItemsAsync();
+        var document = JsonConvert.DeserializeObject<JObject>(response);
+        var dataElement = document?.GetValue("peons");
+        if (dataElement == null) return Enumerable.Empty<MarketplaceItemDTO>();
+
+        foreach (var item in dataElement.Children<JObject>())
+        {
+            item["DateCreated"] = DateTime.UtcNow;
+            item["Slug"] = item["url"]?.ToString()
+                ?.Split('/').LastOrDefault()
+                ?.Replace(".git", "")
+                .ToLower();
+        }
+
+        return JsonConvert.DeserializeObject<List<MarketplaceItemDTO>>(dataElement.ToString())
+               ?? new List<MarketplaceItemDTO>();
     }
 }

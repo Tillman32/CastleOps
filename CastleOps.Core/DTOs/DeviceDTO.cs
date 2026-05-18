@@ -10,7 +10,6 @@ public class DeviceDTO
     public string OperatingSystem { get; set; }
     public string Status { get; set; }
     public DateTime LastSeen { get; set; }
-
-    // A Device can have many Peon configurations
+    public Guid? ClientId { get; set; }
     public List<PeonConfig> PeonConfigs { get; set; } = new();
 }
