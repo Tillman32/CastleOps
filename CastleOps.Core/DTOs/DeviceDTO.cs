@@ -1,5 +1,3 @@
-using CastleOps.Core.DTOs;
-
 namespace CastleOps.Core.DTOs;
 
 public class DeviceDTO
