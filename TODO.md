@@ -12,7 +12,7 @@ Ordered by priority. See [`docs/roadmap.md`](docs/roadmap.md) for full backgroun
 
 - [x] **Fix `Entry` on Peon install.** `MarketplaceService.InstallMarketplaceItemAsync` now sets `Entry` from the parsed `peon.yml` via `PeonYamlDto.ResolvedEntry`.
 
-- [ ] **Peon execution in the Go agent.** The agent polls commands and returns results but does not yet download and execute a Peon script. Needed in `CastleOps.Client/internal/agent` — download entrypoint from GitHub, inject env vars, run script, POST result back.
+- [x] **Peon execution in the Go agent.** `CommandRunPeon` type and `RunPeonPayload` added to `internal/api/models.go`. `RunPeonExecutor` added to `internal/api/commands.go`. New `internal/agent/peon_executor.go` downloads the entry script from the GitHub raw URL, injects per-device env vars, and runs it with the correct interpreter (powershell/python/bash). `CommandHandler` is now wired into `agent.go` — `startSubsystems` calls `initCommandHandler`, `pollCommands` dispatches via `HandleCommands`, and `Stop` drains in-flight commands before shutdown.
 
 - [ ] **Fix 4 failing API client tests** in `CastleOps.Client`.
 
@@ -28,9 +28,9 @@ Ordered by priority. See [`docs/roadmap.md`](docs/roadmap.md) for full backgroun
 
 - [x] **Device detail: Run Peon flow.** `Devices/Details.razor` shows hired peons with a Run button and available peons with a Hire button. Run dispatches `POST api/v1/devices/{id}/peons/{peonId}/run`.
 
-- [ ] **Build `Devices/Add.razor`.** Page body is entirely commented out. Should display a platform-specific install script (from `MorphStack/castle-peon-add-remote-windows-pc`) that the user copies and runs to register a new device.
+- [x] **Build `Devices/Add.razor`.** Displays platform-specific install scripts (Windows PowerShell / macOS bash) with copy-to-clipboard via `IJSRuntime`. Reads `ApiBaseUrl` from `IConfiguration`. Uses `MudTabs` for platform selection.
 
-- [ ] **Clean up `Marketplace/Index.razor`.** Has unused `@using Newtonsoft.Json` and `@using Newtonsoft.Json.Linq` imports. Also logs raw result to `Console.WriteLine` — remove both.
+- [x] **Clean up `Marketplace/Index.razor`.** Removed unused `@using Newtonsoft.Json` and `@using Newtonsoft.Json.Linq` imports. Removed `Console.WriteLine` debug call.
 
 ---
 
@@ -42,7 +42,7 @@ Ordered by priority. See [`docs/roadmap.md`](docs/roadmap.md) for full backgroun
 
 - [x] **Pre-check for duplicate Peon install.** `MarketplaceService` now calls `GetPeonBySlugAsync` before insert.
 
-- [ ] **`DeviceDTO.PeonConfigs` leaks the EF model.** `DeviceDTO.PeonConfigs` is typed `List<PeonConfig>` (the entity class). `DeviceService.MapToDTO` assigns it directly. This exposes EF navigation properties and ties the API contract to the ORM layer. Change to `List<PeonConfigDTO>` and map explicitly in `MapToDTO`.
+- [x] **`DeviceDTO.PeonConfigs` leaks the EF model.** Fixed: `DeviceDTO.PeonConfigs` is now `List<PeonConfigDTO>`. `DeviceService.MapToDTO` explicitly projects each `PeonConfig` entity to `PeonConfigDTO`.
 
 ---
 

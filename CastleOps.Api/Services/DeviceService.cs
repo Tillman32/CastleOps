@@ -155,6 +155,12 @@ public class DeviceService
         Status = d.Status,
         LastSeen = d.LastSeen,
         ClientId = d.ClientId,
-        PeonConfigs = d.PeonConfigs
+        PeonConfigs = d.PeonConfigs.Select(pc => new PeonConfigDTO
+        {
+            PeonId = pc.PeonId,
+            DeviceId = pc.DeviceId,
+            Version = pc.Version,
+            Environment = new Dictionary<string, string>(pc.Environment)
+        }).ToList()
     };
 }

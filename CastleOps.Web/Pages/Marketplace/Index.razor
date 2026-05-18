@@ -1,8 +1,6 @@
 @page "/marketplace"
 @using CastleOps.Core.DTOs
 @using CastleOps.Core.HTTP.Clients
-@using Newtonsoft.Json;
-@using Newtonsoft.Json.Linq
 @inject CastleOpsClient Client
 @inject NavigationManager Navigation
 
@@ -36,8 +34,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         var results = await Client.GetMarketplaceItemsAsync(useCache: false);
-        Console.WriteLine(results.ToString());
-        if(results != null)
+        if (results != null)
         {
             _marketplaceItems = results;
         }

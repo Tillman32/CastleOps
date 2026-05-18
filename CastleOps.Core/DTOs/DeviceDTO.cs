@@ -1,4 +1,4 @@
-using CastleOps.Core.Models;
+using CastleOps.Core.DTOs;
 
 namespace CastleOps.Core.DTOs;
 
@@ -11,5 +11,5 @@ public class DeviceDTO
     public string Status { get; set; }
     public DateTime LastSeen { get; set; }
     public Guid? ClientId { get; set; }
-    public List<PeonConfig> PeonConfigs { get; set; } = new();
+    public List<PeonConfigDTO> PeonConfigs { get; set; } = new();
 }

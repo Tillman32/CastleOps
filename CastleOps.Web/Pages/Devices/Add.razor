@@ -1,51 +1,59 @@
-
 @page "/devices/add"
-@inject HttpClient Http
+@inject IConfiguration Configuration
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
 
 <PageTitle>CastleOps - Add Device</PageTitle>
-<h1>Add Device</h1>
-<p>Here you can add a new device to your account.</p>
 
-@if (isLoading)
-{
-    <MudProgressCircular Indeterminate="true" />
-}
-else if (!string.IsNullOrEmpty(scriptContent))
-{
-    <MudPaper Class="pa-4 mt-4">
-        @* <MudText Typo="Typo.h6">Installation Script</MudText>
-        <MudTextField T="string" @bind-bind-Value="scriptContent" Label="Copy the script below and run it on the device you want to add." ReadOnly="true" />
-        <MudClipboardIconButton Size="Size.Small" Text="@scriptContent" /> *@
-    </MudPaper>
-}
-else if (hasError)
-{
-    <MudAlert Severity="Severity.Error">Failed to load script content.</MudAlert>
-}
+<MudText Typo="Typo.h4" Class="mb-2">Add a Device</MudText>
+<MudText Typo="Typo.body1" Class="mb-6">
+    Run the install script on the device you want to add. It will register itself with this CastleOps instance automatically.
+</MudText>
+
+<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+    <MudTabPanel Text="Windows">
+        <MudText Typo="Typo.h6" Class="mb-2">PowerShell (Run as Administrator)</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Open PowerShell as Administrator and run the following command:
+        </MudText>
+        <MudPaper Elevation="1" Class="pa-4 mb-4" Style="background-color: #1e1e1e; border-radius: 6px;">
+            <MudText Style="color: #9cdcfe; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;">@_windowsScript</MudText>
+        </MudPaper>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => CopyToClipboard(_windowsScript))">
+            Copy to Clipboard
+        </MudButton>
+    </MudTabPanel>
+    <MudTabPanel Text="macOS / Linux">
+        <MudText Typo="Typo.h6" Class="mb-2">Bash</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Open a terminal and run the following command:
+        </MudText>
+        <MudPaper Elevation="1" Class="pa-4 mb-4" Style="background-color: #1e1e1e; border-radius: 6px;">
+            <MudText Style="color: #9cdcfe; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;">@_macosScript</MudText>
+        </MudPaper>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => CopyToClipboard(_macosScript))">
+            Copy to Clipboard
+        </MudButton>
+    </MudTabPanel>
+</MudTabs>
 
 @code {
-    private string scriptContent = string.Empty;
-    private bool isLoading = true;
-    private bool hasError = false;
+    private string _windowsScript = string.Empty;
+    private string _macosScript = string.Empty;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        try
-        {
-            //var client = new HttpClient();
-            //client.DefaultRequestHeaders.Add("User-Agent", "CastleOps-WebApp/1.0");
-            // Replace with your GitHub raw URL
-            //string githubUrl = "https://raw.githubusercontent.com/MorphStack/castle-peon-add-remote-windows-pc/refs/heads/main/src/Add-RemotePC.ps1";
-            //scriptContent = await client.GetStringAsync(githubUrl);
-        }
-        catch (Exception)
-        {
-            hasError = true;
-        }
-        finally
-        {
-            isLoading = false;
-        }
+        var apiUrl = (Configuration["ApiBaseUrl"] ?? "http://localhost:5000").TrimEnd('/');
+
+        _windowsScript = $"""$env:CASTLEOPS_API_URL="{apiUrl}"
+Iex (Invoke-RestMethod "https://raw.githubusercontent.com/MorphStack/castle-peon-add-remote-windows-pc/main/install.ps1")""";
+
+        _macosScript = $"""CASTLEOPS_API_URL="{apiUrl}" bash -c "$(curl -fsSL https://raw.githubusercontent.com/morphstack/castle-peon-add-device/main/install.sh)""";
+    }
+
+    private async Task CopyToClipboard(string text)
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        Snackbar.Add("Copied to clipboard!", Severity.Success);
     }
 }
-
